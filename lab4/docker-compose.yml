@@ -1,0 +1,59 @@
+networks:
+  lab4-net:
+    name: lab4-net
+
+services:
+  kafka:
+    image: quay.io/strimzi/kafka:latest-kafka-4.1.0
+    container_name: lab4-kafka
+    command: [
+      "sh", "-c",
+      "./bin/kafka-storage.sh format --standalone -t $$(./bin/kafka-storage.sh random-uuid) -c ./config/server.properties && ./bin/kafka-server-start.sh ./config/server.properties --override advertised.listeners=$${KAFKA_ADVERTISED_LISTENERS} --override num.partitions=$${KAFKA_NUM_PARTITIONS} --override group.min.session.timeout.ms=$${KAFKA_GROUP_MIN_SESSION_TIMEOUT_MS}"
+    ]
+    ports:
+      - "19092:9092"
+    networks:
+      - lab4-net
+    environment:
+      LOG_DIR: "/tmp/logs"
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_NUM_PARTITIONS: 3
+      KAFKA_GROUP_MIN_SESSION_TIMEOUT_MS: 100
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: lab4-kafka-ui
+    depends_on:
+      - kafka
+    networks:
+      - lab4-net
+    ports:
+      - "8089:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: lab4
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+
+  producer:
+    build: ./producer
+    container_name: lab4-producer
+    depends_on:
+      - kafka
+    networks:
+      - lab4-net
+    environment:
+      KAFKA_BOOTSTRAP: kafka:9092
+      TOPICS: trips-topic1,trips-topic2
+      CSV_PATH: /data/Divvy_Trips_2019_Q4.csv
+      MAX_ROWS: "10000"
+    volumes:
+      - ../docs/Divvy_Trips_2019_Q4.csv:/data/Divvy_Trips_2019_Q4.csv:ro
+
+  streams-app:
+    build: ./streams-app
+    container_name: lab4-streams-app
+    depends_on:
+      - kafka
+    networks:
+      - lab4-net
+    environment:
+      QUARKUS_KAFKA_STREAMS_BOOTSTRAP_SERVERS: kafka:9092
